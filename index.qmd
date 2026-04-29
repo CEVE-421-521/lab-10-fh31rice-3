@@ -84,7 +84,6 @@ You don't need to modify any of this code — just run it.
 ### Packages
 
 ```{julia}
-#| output: false
 if !isfile("Manifest.toml")
     import Pkg
     Pkg.instantiate()
@@ -123,7 +122,6 @@ The AI assistant can explain the framework in context; you should not be memoriz
 :::
 
 ```{julia}
-#| output: false
 include("eijgenraam_timestep.jl")
 ```
 
@@ -138,9 +136,8 @@ The starting dike height, the storm surge distribution, the discount rate, and t
 Sharing the scenario set across policies means differences we observe are **attributable to the policy**, not to sampling noise.
 
 ```{julia}
-#| output: false
 config = DikeConfig()
-n_scenarios = 100
+n_scenarios = 500
 rng = Random.Xoshiro(2026)
 scenarios = [sample_dike_scenario(rng, config) for _ in 1:n_scenarios]
 
@@ -153,9 +150,6 @@ println("Scenarios: $(n_scenarios) sampled futures (SLR uncertainty only)")
 Before running any policy, let's look at what we actually sampled: the fixed Norfolk-calibrated GEV surge distribution [@doss-gollin_subjective:2023] (converted to feet using `Unitful`) and the polynomial MSL trajectories across 20 representative scenarios.
 
 ```{julia}
-#| label: fig-surge-slr
-#| code-fold: true
-#| fig-cap: "Left: the fixed Norfolk-calibrated GEV annual-max storm surge distribution (PDF, in feet). Right: polynomial MSL trajectories $z_t = a + b t + c t^2$ for 20 representative scenarios (feet above baseline)."
 let
     fig = Figure(; size=(900, 400))
 
@@ -230,7 +224,6 @@ Matching @garner_slrise:2018, the two objectives are:
 We also compute `reliability` (fraction of years without overtopping) as a diagnostic alongside the two objectives.
 
 ```{julia}
-#| output: false
 function calculate_metrics(outcomes)
     invest = [SimOptDecisions.value(o.investment_cost)  for o in outcomes]
     damage = [SimOptDecisions.value(o.expected_damages) for o in outcomes]
@@ -252,7 +245,6 @@ All our trade-off plots share the same axes (discounted investment cost vs. disc
 - iso-cost reference lines (`investment + damage = constant`), which run top-left to bottom-right and let you read off the total-cost ordering by eye.
 
 ```{julia}
-#| output: false
 # All plot data is converted from M€ (the internal unit, matching Eijgenraam
 # Table 1) to 10⁹ € for display. Both axes use a pseudo-log scale so that the
 # interesting low-cost region is visible while the overbuilt extremes still
@@ -299,7 +291,6 @@ Before running any optimizer, let's evaluate a grid of static heightenings from 
 ### Run the Grid
 
 ```{julia}
-#| output: false
 heightenings = collect(0.0:20.0:400.0)   # cm, 0–4 m
 static_policies = [StaticDikePolicy(; u_heighten=u) for u in heightenings]
 static_result = explore(config, scenarios, static_policies; progress=false)
@@ -308,7 +299,6 @@ static_result = explore(config, scenarios, static_policies; progress=false)
 Extract per-policy mean metrics and reliability:
 
 ```{julia}
-#| output: false
 investment_mat  = Array(static_result[:investment_cost])
 damage_mat      = Array(static_result[:expected_damages])
 reliability_mat = Array(static_result[:reliability])
@@ -331,7 +321,6 @@ static_df
 A static policy is **non-dominated** on the two objectives if no other policy achieves lower investment cost AND lower damages simultaneously.
 
 ```{julia}
-#| output: false
 """
     is_nondominated(i, df, cols) -> Bool
 
@@ -363,9 +352,6 @@ println("$(nrow(static_nondom)) of $(nrow(static_df)) static policies are non-do
 ### Plot the Trade-off
 
 ```{julia}
-#| label: fig-static-grid
-#| code-fold: true
-#| fig-cap: "Static heightening grid. Each point is a static one-shot heightening; the red diamonds mark the non-dominated subset (the static Pareto front). Dashed curves are iso-cost reference lines (investment + damage = constant; curved because of the pseudo-log axes)."
 let
     fig = Figure(; size=(650, 650))
     ax = tradeoff_axis(fig, (1, 1); title="Static Dike Heightening")
@@ -393,9 +379,9 @@ end
 ::: {.callout-tip appearance="simple" icon=false title="Your Response — Question 1"}
 *Look at the static grid plot.*
 
-1. *Where does the policy you recommended in Lab 8 fall on this plot? (Re-run the grid including your Lab 8 `u_heighten` value if needed.) Is it on the non-dominated set?*
-2. *How many policies are non-dominated? Describe the shape of the trade-off.*
-3. *Where is the "knee" of the trade-off — the point where additional investment stops buying much damage reduction?*
+1. *Where does the policy you recommended in Lab 8 fall on this plot? (Re-run the grid including your Lab 8 `u_heighten` value if needed.) Is it on the non-dominated set?*Ans: I think it falls over dominated set
+2. *How many policies are non-dominated? Describe the shape of the trade-off.*Ans: Acording to print statment, 9 out of 21 are non dominated.
+3. *Where is the "knee" of the trade-off — the point where additional investment stops buying much damage reduction?*Ans: The knee is around 0.5 in th x axis, after which the increased cost doesnt reduce the damage that much.
 :::
 
 
@@ -445,7 +431,6 @@ Before turning to NSGA-II, let's do the same thing we did for static policies: e
 With only two decision variables, a modest grid gives us a clear picture of what the *true* Pareto front looks like, and gives us something to compare the optimizer against.
 
 ```{julia}
-#| output: false
 buffers    = collect(0.0:25.0:400.0)   # cm, 0–4 m
 freeboards = collect(0.0:25.0:300.0)   # cm, 0–3 m
 
@@ -482,9 +467,6 @@ println("$(nrow(adaptive_grid_nondom)) of $(nrow(adaptive_grid_df)) grid policie
 ```
 
 ```{julia}
-#| label: fig-adaptive-grid
-#| code-fold: true
-#| fig-cap: "Brute-force grid over the (buffer, freeboard) policy space. Each point is one adaptive policy; red diamonds mark the non-dominated set. The static non-dominated points are shown in orange for reference."
 let
     fig = Figure(; size=(650, 650))
     ax = tradeoff_axis(fig, (1, 1); title="Adaptive Policy Grid — Buffer/Freeboard")
@@ -524,13 +506,12 @@ Here we use the `MetaheuristicsBackend`, which wraps `Metaheuristics.jl` and let
 We also set `store_history = true` so that, at the end, we can look at how the Pareto front evolved across generations — not just the final result.
 
 ```{julia}
-#| output: false
 backend = MetaheuristicsBackend(;
     algorithm       = :NSGA2,     # multi-objective GA
     max_iterations  = 100,        # number of generations (NSGA-II may early-stop if converged)
     population_size = 60,         # policies carried forward each generation
     parallel        = true,       # evaluate scenarios in parallel where possible
-    store_history   = true,       # keep the per-generation archive for plotting
+           # keep the per-generation archive for plotting
 )
 ```
 
@@ -541,7 +522,17 @@ Default objectives matching GK18: **minimize investment cost and expected damage
 You can swap these for other pairs (e.g. include `reliability` as a third objective), but each re-run takes a minute or two.
 
 ```{julia}
-# Your code here
+objectives = [
+    Objective(:total_investment, Minimize),
+    Objective(:total_loss, Minimize),
+]
+
+bounds = [
+    (0.0, 400.0),  # buffer cm
+    (0.0, 300.0),  # freeboard cm
+]
+
+
 ```
 
 ### Run Optimization
@@ -549,7 +540,16 @@ You can swap these for other pairs (e.g. include `reliability` as a third object
 We time the optimization so you can see how long it took and plan accordingly for the final run.
 
 ```{julia}
-# Your code here
+@time result = optimize(
+    config,
+    scenarios,
+    AdaptiveDikePolicy,
+    calculate_metrics,
+    objectives;
+    backend = backend,
+    batch_size = FullBatch(),
+    bounds = bounds,
+)
 ```
 
 ::: {.callout-note}
@@ -563,10 +563,50 @@ Expect ~5 minutes for the final run.
 Plot the adaptive Pareto front on top of the static grid for comparison.
 
 ```{julia}
-#| label: fig-pareto-adaptive
-#| code-fold: true
-#| fig-cap: "NSGA-II adaptive Pareto front (blue circles + line), with the static non-dominated policies (orange triangles) and the brute-force adaptive grid's non-dominated set (red diamonds) for comparison."
-# Your code here
+let
+    fig = Figure(; size=(650, 650))
+    ax = tradeoff_axis(fig, (1, 1); title="NSGA-II Adaptive Pareto Front")
+
+    # static non-dominated
+    scatter!(ax,
+        to_billion(static_nondom.total_investment),
+        to_billion(static_nondom.total_loss);
+        color=:orange, marker=:utriangle, markersize=10,
+        label="Static non-dominated")
+
+    # adaptive grid non-dominated
+    scatter!(ax,
+        to_billion(adaptive_grid_nondom.total_investment),
+        to_billion(adaptive_grid_nondom.total_loss);
+        color=:red, marker=:diamond, markersize=10,
+        label="Adaptive grid non-dominated")
+
+    # NSGA-II Pareto
+    opt = result.pareto_objectives
+    opt_inv = [x[1] for x in opt]
+    opt_loss = [x[2] for x in opt]
+
+    order = sortperm(opt_inv)
+    opt_inv = opt_inv[order]
+    opt_loss = opt_loss[order]
+
+    scatter!(ax,
+        to_billion(opt_inv),
+        to_billion(opt_loss);
+        color=:blue, markersize=8,
+        label="NSGA-II Pareto")
+
+    lines!(ax,
+        to_billion(opt_inv),
+        to_billion(opt_loss);
+        color=:blue)
+
+    axislegend(ax; position=:rt)  #  this adds legend
+
+    fig
+end
+
+show(adaptive_grid_nondom[:, [:buffer, :freeboard, :total_investment, :total_loss]], allrows=true)
 ```
 
 ### Watching the Front Converge
@@ -575,26 +615,25 @@ Because we set `store_history = true`, we can extract the Pareto archive at ever
 Early generations are noisy; later ones should concentrate near the final front.
 
 ```{julia}
-#| label: fig-pareto-evolution
-#| code-fold: true
-#| fig-cap: "Evolution of the adaptive Pareto front over NSGA-II generations. For each generation we plot only that generation's non-dominated set (not the full population), so the lines reveal how the front migrates toward the bottom-left over time."
-# Your code here
+# reuse final Pareto (since history not available)
+
+
 ```
 
 ::: {.callout-tip appearance="simple" icon=false title="Your Response — Question 2"}
 *Pick one solution from the adaptive Pareto front.*
 
-1. *What buffer and freeboard values does it use?*
-2. *Describe in plain language what this policy does — when does it trigger heightening, and how much does it raise the dike?*
-3. *Who might prefer this solution over the alternatives on the Pareto front — a risk-averse stakeholder, a fiscally-conservative one, or someone in the middle? Why?*
+1. *What buffer and freeboard values does it use?* Ans: Note: I couldnt see the convergence, it was not working for me (store_history=True was not working).My think is that with buffer 25cm and freeboard 25 cm where the investment cost and damage are balanced.
+2. *Describe in plain language what this policy does — when does it trigger heightening, and how much does it raise the dike?* Ans: The policy doesnot raise dikeimmediately. It waits untile water level approach safety thresold (buffer+freeboard), if it reaches, then dike heighten trigger. It is heightened sufficiently to restore the safety
+3. *Who might prefer this solution over the alternatives on the Pareto front — a risk-averse stakeholder, a fiscally-conservative one, or someone in the middle? Why?* Ans: someone in the middle who wants balance between cost and risk.
 :::
 
 ::: {.callout-tip appearance="simple" icon=false title="Your Response — Question 3"}
 *Compare the adaptive Pareto front to the static grid and to your Lab 8 recommendation.*
 
-1. *Does the adaptive front Pareto-dominate all of the static policies? Some of them? None?*
-2. *What is the source of the adaptive policy's advantage (when it has one)?*
-3. *GK18 also studied a 10-variable DPS that lets the buffer and freeboard respond to the observed SLR trend and variability. In their results, the 2-variable version captured most of the gain. Does that match your intuition from this lab — and under what conditions would you expect the 10-variable version to matter more?*
+1. *Does the adaptive front Pareto-dominate all of the static policies? Some of them? None?* Ans: I would say adaptive dominate mostly the static one.
+2. *What is the source of the adaptive policy's advantage (when it has one)?* Ans: Adaptive policy is flexible and it can choose to increase dike height when actual water level changes.
+3. *GK18 also studied a 10-variable DPS that lets the buffer and freeboard respond to the observed SLR trend and variability. In their results, the 2-variable version captured most of the gain. Does that match your intuition from this lab — and under what conditions would you expect the 10-variable version to matter more?* Ans: Yes, 2 variables policy policy capture the most benefit as it allows most the adaptive behaviour. 10 variables will be necessary for more complex system dynamics of rapidly change SLR scenarios.
 :::
 
 
